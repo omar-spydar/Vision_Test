@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import cv2 # OpenCV contrib library 4.6
 import numpy as np # Numpy v <2.0
+print("numpy: ", np.__version__)
+import cv2 # OpenCV contrib library 4.6
 from scipy.spatial.transform import Rotation as R # Standard SciPy library
 import math # Math library included with Python
 
@@ -74,7 +75,7 @@ def main():
     
     # Start video stream
     # cap = cv2.VideoCapture(0)
-    rtsp_url = "rtsp://admin:111111@10.0.0.84:554/cam/realmonitor?channel=1&subtype=0"
+    rtsp_url = "rtsp://admin:111111@10.0.0.84:554/cam/realmonitor?channel=2&subtype=0"
     iphone_url = 'http://10.0.0.156:4747/video'
     cap = cv2.VideoCapture(rtsp_url)
     
