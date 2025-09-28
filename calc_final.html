@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fiducial Pixel / Cell Calculator - SpyDar Sensors</title>
+  <style>
+    :root {
+      --bg: #0b0f14; --card: #121822; --muted: #8aa0b6; --text: #e7eef7;
+      --accent: #4aa3ff; --ok: #2ecc71; --warn: #f39c12; --bad: #e74c3c; 
+      --best: #4aa3ff; /* light blue */
+      --work: #f1c40f; /* yellow */
+      --border: #1e2633; --chip: #1a2230;
+    }
+    html, body { height: 100%; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; background: var(--bg); color: var(--text); margin: 0; }
+    .container { max-width: 1100px; margin: 24px auto 64px; padding: 0 16px; }
+    h1 { font-size: 1.8rem; margin: 0 0 16px; }
+    p.sub { color: var(--muted); margin: 0 0 24px; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+    input[type="number"], select { width: 100%; box-sizing: border-box; background: #0f141d; color: var(--text); border-radius: 10px; border: 1px solid var(--border); padding: 10px 12px; outline: none; }
+    input[type="number"]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,163,255,.15); }
+    .chip { display: inline-flex; align-items: center; gap: 8px; background: var(--chip); border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px; color: var(--muted); font-size: 0.85rem; }
+    .actions { display: flex; align-items: center; gap: 12px; }
+    .btn { background: var(--accent); color: #03121f; border: none; border-radius: 10px; padding: 10px 14px; font-weight: 600; cursor: pointer; }
+    .btn.secondary { background: #0f141d; color: var(--text); border: 1px solid var(--border); }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; font-variant-numeric: tabular-nums; }
+    th { color: var(--muted); font-weight: 600; }
+    .pill { padding: 3px 8px; border-radius: 999px; font-size: 0.8rem; border: 1px solid var(--border); background: #0f141d; color: var(--text);}
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .best { color: var(--best); }
+    .work { color: var(--work); }
+    .hidden { display: none !important; }
+    details summary { cursor: pointer; color: var(--muted); }
+    .foot { color: var(--muted); font-size: .9rem; margin-top: 12px; }
+    @media (max-width: 860px) { .grid { grid-template-columns: repeat(6, 1fr); } }
+    @media (max-width: 520px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+    .math { margin: 6px 0; }
+  </style>
+  <!-- MathJax for LaTeX rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Fiducial Pixel / Cell Calculator</h1>
+    <h3>Works with ArUco, AprilTag, QR N upto 29</h3>
+    <h4>ChArUco and Checkerboards require slight mods</h4>
+    <p class="sub">Compute projected tag size (px), area (px²), and pixels-per-cell for 4×4…7×7 families. Table updates automatically when inputs are valid (>0) and at least one camera is selected; otherwise it hides.</p>
+    <p class="sub">Alternate (lens mode) formula was created close to the end of figuring out the first formula. This will probably be more accurate but first should work for our purpose </p>
+
+    <div class="grid">
+      <div class="card" style="grid-column: span 8;">
+        <div class="row">
+          <div style="flex:2 min-width: 180px;">
+            <label>Tag size</label>
+            <div class="row" style="gap:8px; align-items:center;">
+              <input id="tagSize" type="number" min="0" step="0.001" placeholder="e.g. 0.15" />
+              <select id="tagUnit">
+                <option value="m">m</option>
+                <option value="cm" selected>cm</option>
+                <option value="mm">mm</option>
+              </select>
+            </div>
+            <div class="foot">Full printed square without white border Example: 15 cm.</div>
+          </div>
+          <div style="flex:2; min-width: 180px;">
+            <label>Distance</label>
+            <div class="row" style="gap:8px; align-items:center;">
+              <input id="distance" type="number" min="0" step="0.01" placeholder="e.g. 5" />
+              <select id="distUnit">
+                <option value="m" selected>m</option>
+                <option value="cm">cm</option>
+              </select>
+            </div>
+            <div class="foot">Straight-line distance from camera→tag center.</div>
+          </div>
+        </div>
+        <div><hr></div>
+        <div class="row">
+                    <div style="flex: 2; min-width: 260px;">
+            <label>Camera presets (multi-select)</label>
+            <select id="presetSelect" multiple size="12" style="width:100%; height: 280px; align-self:flex-start;"></select>
+            <div class="row" style="justify-content:space-between; margin-top:8px;">
+              <label class="chip"><input id="selectAll" type="checkbox"/> Select all presets</label>
+              <button class="btn secondary" id="clearPresets">Clear</button>
+            </div>
+          </div>
+
+          <div style="flex: 3; min-width: 260px;">
+            <label>Add custom camera</label>
+            <div class="row">
+              <div style="flex:1; min-width:130px;">
+                <label>Width (px)</label>
+                <input id="cWidth" type="number" min="1" step="1" placeholder="e.g. 3840" />
+              </div>
+              <div style="flex:1; min-width:130px;">
+                <label>Height (px)</label>
+                <input id="cHeight" type="number" min="1" step="1" placeholder="e.g. 2160" />
+              </div>
+            </div>
+            <div style="flex:1; min-width:130px;">
+                <label>HFOV (deg)</label>
+                <input id="cHFOV" type="number" min="1" step="0.1" placeholder="e.g. 70" />
+              </div>
+            <div class="row">
+            </div>
+            <div class="foot" style="text-align:center; margin-top:6px;">— OR —</div>
+            <div class="row" style="margin-top:6px;">
+              <div style="flex:1; min-width:130px;">
+                <label>Focal length (mm)</label>
+                <input id="cFocal" type="number" min="0" step="0.01" placeholder="e.g. 6.0" />
+              </div>
+              <div style="flex:1; min-width:130px;">
+                <label>Sensor width (mm)</label>
+                <input id="cSensorWidth" type="number" min="0" step="0.01" placeholder="e.g. 6.4" />
+              </div>
+            </div>
+            <div class="foot">If both fields above are > 0, HFOV is computed and auto‑fills the HFOV box.</div>
+            <div class="actions" style="margin-top:8px;">
+              <button class="btn" id="addCustom">Add to presets</button>
+              <span class="muted" id="customMsg"></span>
+            </div>
+          </div>
+
+        </div>
+        
+      </div>
+
+      <div class="card" style="grid-column: span 4;">
+        <div class="row" style="align-items:start;">
+
+          <div style="flex: 2; min-width: 240px;">
+            <label>Formulas</label>
+            <div class="math">$$ \text{px/cell} = \frac{\theta \cdot (\text{width}_{px}/\text{HFOV})}{N} $$</div>
+            
+            <div class="math">$$ \theta = 2\,\arctan\!\left(\frac{W}{2d}\right) $$</div>
+            <div class="chip">θ ≈ <strong id="thetaDeg">–</strong>°</div>
+
+            <div class="foot">Alternate (lens mode - future calc)</div>
+            <div class="math">$$ \text{px/cell} = \frac{W\cdot w}{d\cdot s}\cdot\frac{f}{N} $$</div>
+            <label>Where</label>
+            <div class="foot">θ = tag angular width (degrees) </div>
+            <div class="foot">W = tag physical width (meters)</div>
+            <div class="foot">d = camera-to-tag distance (meters)</div>
+            <div class="foot">width_px = image width in pixels</div>
+            <div class="foot">HFOV = horizontal field of view (degrees)</div>
+            <div class="foot">N = marker dictionary size + 2 (for black border)</div>
+            <div class="foot">f = focal length (mm)</div>
+            <div class="foot">s = sensor width (mm)</div>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tableCard" class="card hidden" style="grid-column: span 12;">
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div class="chip">Valid inputs ✓ — table auto-updated</div>
+          <button class="btn secondary" id="downloadCsv">Download CSV</button>
+        </div>
+        <div style="overflow:auto;">
+          <table id="resultTable">
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Resolution</th>
+                <th>HFOV (°)</th>
+                <th>px/deg</th>
+                <th>Tag px width</th>
+                <th>Tag area px²</th>
+                <th>px/cell 4×4 (N=6)</th>
+                <th>px/cell 5×5 (N=7)</th>
+                <th>px/cell 6×6 (N=8)</th>
+                <th>px/cell 7×7 (N=9)</th>
+                <th>Recommendation</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <details style="margin-top:10px;">
+          <summary>Heuristics for recommendations</summary>
+          <ul>
+            <li><span class="best">&gt; 10 px/cell (best)</span>: 7×7 viable; 6×6 rock‑solid.</li>
+            <li><span class="ok">8–10 px/cell</span>: 6×6 solid; 7×7 often OK.</li>
+            <li><span class="work">6–8 px/cell (work)</span>: 5×5–6×6 workable.</li>
+            <li><span class="warn">4–6 px/cell</span>: prefer 4×4; 5×5 borderline.</li>
+            <li><span class="bad">&lt; 4 px/cell</span>: increase res / narrow FOV / move closer.</li>
+          </ul>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // -------- Preset catalog --------
+    const presetCatalog = [
+      // label, width, height, HFOV_deg
+      ["720p @ 60°", 1280, 720, 60],
+      ["720p @ 90°", 1280, 720, 90],
+      ["1080p @ 60°", 1920, 1080, 60],
+      ["1080p @ 70°", 1920, 1080, 70],
+      ["1080p @ 80°", 1920, 1080, 80],
+      ["1080p @ 90°", 1920, 1080, 90],
+      ["1440p @ 70°", 2560, 1440, 70],
+      ["1440p @ 90°", 2560, 1440, 90],
+      ["4K @ 60°", 3840, 2160, 60],
+      ["4K @ 70°", 3840, 2160, 70],
+      ["4K @ 80°", 3840, 2160, 80],
+      ["4K @ 90°", 3840, 2160, 90],
+      ["5K-ish (5312×2988) @ 70°", 5312, 2988, 70],
+      ["5K-ish (5312×2988) @ 90°", 5312, 2988, 90],
+    ];
+
+    const el = {
+      tagSize: document.getElementById('tagSize'),
+      tagUnit: document.getElementById('tagUnit'),
+      distance: document.getElementById('distance'),
+      distUnit: document.getElementById('distUnit'),
+      thetaDeg: document.getElementById('thetaDeg'),
+      presetSelect: document.getElementById('presetSelect'),
+      selectAll: document.getElementById('selectAll'),
+      clearPresets: document.getElementById('clearPresets'),
+      cWidth: document.getElementById('cWidth'),
+      cHeight: document.getElementById('cHeight'),
+      cHFOV: document.getElementById('cHFOV'),
+      cFocal: document.getElementById('cFocal'),
+      cSensorWidth: document.getElementById('cSensorWidth'),
+      addCustom: document.getElementById('addCustom'),
+      customMsg: document.getElementById('customMsg'),
+      tableCard: document.getElementById('tableCard'),
+      tableBody: document.querySelector('#resultTable tbody'),
+      downloadCsv: document.getElementById('downloadCsv'),
+    };
+
+    // populate presets
+    function loadPresets() {
+      el.presetSelect.innerHTML = '';
+      presetCatalog.forEach((p, idx) => {
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        opt.textContent = `${p[0]} — ${p[1]}×${p[2]}`;
+        el.presetSelect.appendChild(opt);
+      });
+    }
+
+    function unitToMeters(value, unit) {
+      const v = Number(value);
+      if (!isFinite(v) || v <= 0) return NaN;
+      switch (unit) {
+        case 'm': return v;
+        case 'cm': return v / 100;
+        case 'mm': return v / 1000;
+        default: return NaN;
+      }
+    }
+
+    function distanceToMeters(value, unit) {
+      const v = Number(value);
+      if (!isFinite(v) || v <= 0) return NaN;
+      switch (unit) {
+        case 'm': return v;
+        case 'cm': return v / 100;
+        default: return NaN;
+      }
+    }
+
+    function fmt(n, digits = 1) {
+      if (!isFinite(n)) return '–';
+      return Number(n).toFixed(digits);
+    }
+
+    // Compute HFOV from focal length & sensor width (degrees)
+    function hfovFromLens(sensorWidthMm, focalMm) {
+      if (!(sensorWidthMm > 0 && focalMm > 0)) return NaN;
+      return 2 * (Math.atan((sensorWidthMm) / (2 * focalMm))) * (180 / Math.PI);
+    }
+
+    // Map px/cell value to color class from heuristics
+    function classifyPxCell(x) {
+      if (x > 10) return 'best';
+      if (x >= 8) return 'ok';
+      if (x >= 6) return 'work';
+      if (x >= 4) return 'warn';
+      return 'bad';
+    }
+
+    function colored(val) {
+      const cls = classifyPxCell(val);
+      return `<span class="${cls}">${fmt(val,2)}</span>`;
+    }
+
+    // Updated wording with classes in parentheses
+    function recommend(px4, px5, px6, px7) {
+      if (px7 >= 10) return 'best: 7×7_1000 OK; 6×6_250 solid';
+      if (px6 >= 8) return '6×6_250 solid; 7×7_1000 possible';
+      if (px5 >= 6) return 'work: 5×5_100 or 6×6_250';
+      if (px4 >= 4) return '4×4_50 (5×5 borderline)';
+      return 'Increase res / narrow FOV / move closer';
+    }
+
+    function computeRows() {
+      // Validate inputs
+      const Wm = unitToMeters(el.tagSize.value, el.tagUnit.value);
+      const dm = distanceToMeters(el.distance.value, el.distUnit.value);
+      if (!isFinite(Wm) || !isFinite(dm) || Wm <= 0 || dm <= 0) {
+        el.thetaDeg.textContent = '–';
+        el.tableCard.classList.add('hidden');
+        return [];
+      }
+
+      // angular width θ in degrees
+      const theta = 2 * Math.atan(Wm / (2 * dm));
+      const thetaDeg = theta * (180 / Math.PI);
+      el.thetaDeg.textContent = fmt(thetaDeg, 3);
+
+      // selected presets
+      const selectedIdx = Array.from(el.presetSelect.selectedOptions).map(o => Number(o.value));
+      if (selectedIdx.length === 0) {
+        el.tableCard.classList.add('hidden');
+        return [];
+      }
+
+      const rows = selectedIdx.map(idx => {
+        const [label, w, h, hfov] = presetCatalog[idx];
+        if (!(w>0 && h>0 && hfov>0)) return null;
+        const pxPerDeg = w / hfov;
+        const tagPxW = thetaDeg * pxPerDeg;
+        const area = tagPxW * tagPxW;
+        const px4 = tagPxW / 6; // N = 4+2
+        const px5 = tagPxW / 7; // N = 5+2
+        const px6 = tagPxW / 8; // N = 6+2
+        const px7 = tagPxW / 9; // N = 7+2
+        return {
+          label,
+          res: `${w}×${h}`,
+          hfov,
+          ppd: pxPerDeg,
+          tagPxW: tagPxW,
+          area,
+          px4, px5, px6, px7,
+          rec: recommend(px4, px5, px6, px7),
+        };
+      }).filter(Boolean);
+
+      // sort by width then HFOV
+      rows.sort((a,b) => (parseInt(a.res) - parseInt(b.res)) || (a.hfov - b.hfov));
+      return rows;
+    }
+
+    function renderTable() {
+      const rows = computeRows();
+      if (!rows.length) {
+        el.tableCard.classList.add('hidden');
+        el.tableBody.innerHTML = '';
+        return;
+      }
+      el.tableCard.classList.remove('hidden');
+      el.tableBody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${r.label}</td>
+          <td>${r.res}</td>
+          <td>${fmt(r.hfov,1)}</td>
+          <td>${fmt(r.ppd,2)}</td>
+          <td>${fmt(r.tagPxW,1)}</td>
+          <td>${Math.round(r.area)}</td>
+          <td>${colored(r.px4)}</td>
+          <td>${colored(r.px5)}</td>
+          <td>${colored(r.px6)}</td>
+          <td>${colored(r.px7)}</td>
+          <td>${r.rec}</td>
+        </tr>`).join('');
+    }
+
+    // CSV download
+    function downloadCSV() {
+      const rows = computeRows();
+      if (!rows.length) return;
+      const header = [
+        'Label','Resolution','HFOV_deg','px_per_deg','TagWidth_px','TagArea_px2','px/cell_4x4(N=6)','px/cell_5x5(N=7)','px/cell_6x6(N=8)','px/cell_7x7(N=9)','Recommendation'
+      ];
+      const lines = [header.join(',')];
+      rows.forEach(r => {
+        lines.push([
+          r.label,
+          r.res,
+          r.hfov,
+          r.ppd.toFixed(2),
+          r.tagPxW.toFixed(1),
+          Math.round(r.area),
+          r.px4.toFixed(2),
+          r.px5.toFixed(2),
+          r.px6.toFixed(2),
+          r.px7.toFixed(2),
+          '"' + r.rec + '"'
+        ].join(','));
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'aruco_calculator.csv';
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }
+
+    // Select-all behavior
+    el.selectAll.addEventListener('change', () => {
+      const all = el.selectAll.checked;
+      for (const opt of el.presetSelect.options) opt.selected = all;
+      renderTable();
+    });
+    el.clearPresets.addEventListener('click', () => {
+      for (const opt of el.presetSelect.options) opt.selected = false;
+      el.selectAll.checked = false;
+      renderTable();
+    });
+
+    // Add custom camera
+    el.addCustom.addEventListener('click', () => {
+      const w = Number(el.cWidth.value), h = Number(el.cHeight.value);
+      let f = Number(el.cHFOV.value);
+      const fmm = Number(el.cFocal.value), sw = Number(el.cSensorWidth.value);
+
+      if (!(f > 0)) {
+        const computed = hfovFromLens(sw, fmm);
+        if (isFinite(computed)) {
+          f = computed;
+          el.cHFOV.value = computed.toFixed(2);
+        }
+      }
+
+      if (!(w > 0 && h > 0 && f > 0)) {
+        el.customMsg.textContent = 'Need width, height and either HFOV > 0 OR focal & sensor width > 0';
+        el.customMsg.style.color = 'var(--bad)';
+        return;
+      }
+
+      const label = `${w}×${h} @ ${f.toFixed(1)}°`;
+      presetCatalog.push([label, w, h, f]);
+      loadPresets();
+      const idx = presetCatalog.length - 1;
+      for (const opt of el.presetSelect.options) opt.selected = false;
+      el.presetSelect.options[idx].selected = true;
+      el.customMsg.textContent = 'Added to presets.';
+      el.customMsg.style.color = 'var(--muted)';
+      renderTable();
+    });
+
+    // Auto-render on any input change
+    ['input','change'].forEach(evt => {
+      [el.tagSize, el.tagUnit, el.distance, el.distUnit, el.presetSelect].forEach(n => n.addEventListener(evt, renderTable));
+    });
+
+    // Live-compute HFOV in custom section when focal & sensor are valid
+    ['input','change'].forEach(evt => {
+      [el.cFocal, el.cSensorWidth].forEach(n => n.addEventListener(evt, () => {
+        const fmm = Number(el.cFocal.value), sw = Number(el.cSensorWidth.value);
+        const computed = hfovFromLens(sw, fmm);
+        if (isFinite(computed)) {
+          el.cHFOV.value = computed.toFixed(2);
+          el.customMsg.textContent = `HFOV computed: ${computed.toFixed(2)}°`;
+          el.customMsg.style.color = 'var(--muted)';
+        }
+      }));
+    });
+
+    el.downloadCsv.addEventListener('click', downloadCSV);
+
+    // Defaults for convenience
+    function setDefaults() {
+      el.tagSize.value = 15; // cm
+      el.tagUnit.value = 'cm';
+      el.distance.value = 5;
+      el.distUnit.value = 'm';
+      // Select some useful presets by default
+      loadPresets();
+      const defaults = [0, 2, 3, 6, 8, 10]; // 1080p@60, 1080p@70, 4K@60, 4K@80 (by index after load)
+      for (const i of defaults) if (el.presetSelect.options[i]) el.presetSelect.options[i].selected = true;
+    }
+
+    loadPresets();
+    setDefaults();
+    renderTable();
+  </script>
+</body>
+</html>
