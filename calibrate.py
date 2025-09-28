@@ -40,7 +40,7 @@ image_points = []
 def main():
       
   # Get file path for images in current directory
-  images = glob.glob('*.jpg')
+  images = glob.glob('iphone/*.jpeg')
       
   # Go through each chessboard image, one by one
   for image_file in images:
@@ -68,6 +68,14 @@ def main():
   
       # Draw corners
       cv2.drawChessboardCorners(image, (nY, nX), corners_2, success)
+
+      # Create the output file name by removing the '.jpg' part
+      size = len(image_file)
+      new_filename = image_file[:size - 4]
+      new_filename = new_filename + '_drawn_corners.jpg'     
+
+      # Save the new image in the working directory
+      cv2.imwrite(new_filename, image)
   
       # Display image. Used for testing.
       cv2.imshow("Image", image) 
@@ -83,13 +91,13 @@ def main():
                                                     None)
  
   # Save parameters to a file
-  cv_file = cv2.FileStorage('calibration.yaml', cv2.FILE_STORAGE_WRITE)
+  cv_file = cv2.FileStorage('iphone_calibration.yaml', cv2.FILE_STORAGE_WRITE)
   cv_file.write('K', mtx)
   cv_file.write('D', dist)
   cv_file.release()
   
   # Load parameters from saved file
-  cv_file = cv2.FileStorage('calibration.yaml', cv2.FILE_STORAGE_READ) 
+  cv_file = cv2.FileStorage('iphone_calibration.yaml', cv2.FILE_STORAGE_READ) 
   mtx = cv_file.getNode('K').mat()
   dist = cv_file.getNode('D').mat()
   cv_file.release()
